@@ -1,9 +1,20 @@
 package logging
 
 import (
+	"fmt"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+// ValidateLogLevel validates that the provided log level is valid
+func ValidateLogLevel(level string) error {
+	var zapLevel zapcore.Level
+	if err := zapLevel.UnmarshalText([]byte(level)); err != nil {
+		return fmt.Errorf("invalid log level %q: %w", level, err)
+	}
+	return nil
+}
 
 type Logger struct {
 	*zap.SugaredLogger

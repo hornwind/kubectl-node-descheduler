@@ -11,16 +11,54 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
+const helpText = `
+Deschedule workloads from one or more nodes gracefully.
+
+You can specify nodes either by name as arguments or by labels using the --label flag.
+The tool will cordon the specified nodes and evict pods according to the configured parameters.
+
+Examples:
+  # Deschedule a single node
+  kubectl node-descheduler deschedule node1
+
+  # Deschedule multiple nodes
+  kubectl node-descheduler deschedule node1 node2
+
+  # Deschedule nodes by label
+  kubectl node-descheduler deschedule --label node-role.kubernetes.io/worker=true
+
+  # Skip certain namespaces
+  kubectl node-descheduler deschedule node1 --skip-namespace kube-system --skip-namespace monitoring
+`
+
+// DeschedulerOptions holds the configuration options for the descheduler
 type DeschedulerOptions struct {
-	args                []string
-	nodeNames           []string
-	skipNamespaces      []string
-	nodeLabels          []string
-	client              *kubernetes.Clientset
-	configFlags         *genericclioptions.ConfigFlags
+	// args holds the raw command line arguments
+	args []string
+
+	// nodeNames is the list of node names to deschedule
+	nodeNames []string
+
+	// skipNamespaces is the list of namespaces to skip during descheduling
+	skipNamespaces []string
+
+	// nodeLabels is the list of labels to match nodes for descheduling
+	nodeLabels []string
+
+	// client is the Kubernetes client for interacting with the cluster
+	client *kubernetes.Clientset
+
+	// configFlags holds the Kubernetes client configuration flags
+	configFlags *genericclioptions.ConfigFlags
+
+	// deletionGracePeriod is the grace period in seconds for pod deletion
 	deletionGracePeriod int64
-	logLevel            string
-	dryRun              bool
+
+	// logLevel sets the logging verbosity
+	logLevel string
+
+	// dryRun enables running without making actual changes
+	dryRun bool
 }
 
 func NewDeschedulerOptions() *DeschedulerOptions {
@@ -35,16 +73,25 @@ func NewCmdDescheduler() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "deschedule [node name] [flags]",
-		Short: "Deschedule worcloads from node gracefully",
+		Short: "Deschedule workloads from node gracefully",
+		Long:  helpText,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			o.args = args
-			if len(o.args) < 1 {
-				if len(o.nodeLabels) == 0 {
-					return fmt.Errorf("must provide a node to be descheduled or labels to match nodes")
-				}
-				return nil
+			if len(o.args) < 1 && len(o.nodeLabels) == 0 {
+				return fmt.Errorf("must provide a node to be descheduled or labels to match nodes")
 			}
 			o.nodeNames = o.args
+
+			// Validate log level
+			if err := logging.ValidateLogLevel(o.logLevel); err != nil {
+				return fmt.Errorf("invalid log level: %w", err)
+			}
+
+			// Validate grace period
+			if o.deletionGracePeriod < 0 {
+				return fmt.Errorf("deletion grace period must be non-negative")
+			}
+
 			return nil
 		},
 		RunE: func(c *cobra.Command, args []string) error {
@@ -59,32 +106,39 @@ func NewCmdDescheduler() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringArrayVarP(&o.nodeLabels, "label", "", nil, "Match labels on nodes to be descheduled")
-	cmd.Flags().StringArrayVarP(&o.skipNamespaces, "skip-namespace", "", nil, "Namespaces to be skipped")
-	cmd.Flags().Int64VarP(&o.deletionGracePeriod, "deletion-grace-period", "", 30, "Deletion grace period in seconds")
-	cmd.Flags().StringVarP(&o.logLevel, "log-level", "", "info", "Log level")
+	cmd.Flags().StringArrayVarP(&o.nodeLabels, "label", "l", nil, "Match labels on nodes to be descheduled")
+	cmd.Flags().StringArrayVarP(&o.skipNamespaces, "skip-namespace", "S", nil, "Namespaces to be skipped")
+	cmd.Flags().Int64VarP(&o.deletionGracePeriod, "grace-period", "g", 30, "Deletion grace period in seconds")
+	cmd.Flags().StringVarP(&o.logLevel, "log-level", "", "info", "Log level (debug, info, warn, error)")
 	cmd.Flags().BoolVarP(&o.dryRun, "dry-run", "", false, "Dry run mode")
-	cmd.PersistentFlags().BoolP("help", "", false, "Show help for command")
+	cmd.PersistentFlags().BoolP("help", "h", false, "Show help for command")
 
 	o.configFlags.AddFlags(cmd.Flags())
 
 	return cmd
 }
 
+// Complete the setup of the command
 func (d *DeschedulerOptions) Complete() error {
 	restConfig, err := d.configFlags.ToRawKubeConfigLoader().ClientConfig()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get REST config: %w", err)
 	}
 	d.client, err = kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
 	return nil
 }
 
+// Run executes the descheduler command
 func (d *DeschedulerOptions) Run() error {
 	ctx := context.Background()
+
+	// // Create context with timeout
+	// ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	// defer cancel()
+
 	descheduler := descheduler.NewDescheduler(
 		d.client,
 		d.skipNamespaces,
@@ -96,10 +150,13 @@ func (d *DeschedulerOptions) Run() error {
 	)
 
 	logger := logging.GetLogger()
-	logger.SetLogLevel(d.logLevel)
+	if err := logger.SetLogLevel(d.logLevel); err != nil {
+		return fmt.Errorf("failed to set log level: %w", err)
+	}
+
 	logger.Infoln("Dry-run mode is", d.dryRun)
 	logger.Infof("Deletion grace period is %ds", d.deletionGracePeriod)
-	logger.Infoln("Skip namespaces are", d.skipNamespaces)
+	logger.Debugln("Received skip namespaces are", d.skipNamespaces)
 	if len(d.nodeLabels) > 0 {
 		logger.Infoln("Matching nodes with labels", d.nodeLabels)
 	}

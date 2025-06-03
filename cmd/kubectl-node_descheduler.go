@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/hornwind/kubectl-node-descheduler/pkg/cmd"
@@ -13,6 +14,7 @@ func main() {
 
 	root := cmd.NewCmdDescheduler()
 	if err := root.Execute(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }

@@ -61,6 +61,9 @@ func (d *Descheduler) Run(ctx context.Context) error {
 		return err
 	}
 
+	d.updateSkipNamespaces()
+	d.logger.Infoln("Skipped namespaces:", d.skipNamespaces)
+
 	ticker := time.NewTicker(evictionInterval)
 	defer ticker.Stop()
 
@@ -142,9 +145,19 @@ func (d *Descheduler) drainIteration(ctx context.Context) error {
 	return nil
 }
 
-// func (d *Descheduler) getNs(ctx context.Context) (*apiv1.NamespaceList, error) {
-// 	return d.client.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
-// }
+// avoid typos and mistakes in the skipNamespaces flag
+func (d *Descheduler) updateSkipNamespaces() {
+	d.logger.Debugln("skipNamespaces before parsing:", d.skipNamespaces)
+	ns := strings.Join(d.skipNamespaces, ",")
+	d.logger.Debugln("Namespaces after joining:", ns)
+	s := strings.Split(ns, ",")
+	d.logger.Debugln("Namespaces after splitting:", s)
+	for i := range s {
+		s[i] = strings.TrimSpace(s[i])
+	}
+	d.logger.Debugln("Namespaces after trimming and formatting:", s)
+	d.skipNamespaces = s
+}
 
 func (d *Descheduler) getPods(ctx context.Context) (*apiv1.PodList, error) {
 	podList := &apiv1.PodList{}
@@ -184,7 +197,7 @@ func (d *Descheduler) getPods(ctx context.Context) (*apiv1.PodList, error) {
 		}
 	}
 
-	d.logger.Debugln("Pods for eviction:", len(allowedPods.Items))
+	d.logger.Infoln("Pods for eviction:", len(allowedPods.Items))
 	if len(allowedPods.Items) == 0 {
 		d.logger.Infoln("No pods to evict, stopping descheduler")
 		d.cancel()
@@ -260,8 +273,6 @@ func (d *Descheduler) scheduleEvictions(ctx context.Context, pods *apiv1.PodList
 					continue
 				}
 
-				ids[string(ownerRef.UID)] = struct{}{}
-
 				if rs.Status.Replicas == 0 && rs.Status.ReadyReplicas == 0 && rs.Status.AvailableReplicas == 0 {
 					d.logger.Infoln("ReplicaSet", ownerRef.Name, "in ns", pod.Namespace, "has no replicas, skipping")
 					continue
@@ -282,6 +293,7 @@ func (d *Descheduler) scheduleEvictions(ctx context.Context, pods *apiv1.PodList
 				if err != nil {
 					d.logger.Errorln("Error evicting pod", pod.Name, "in ns", pod.Namespace, ":", err)
 				}
+				ids[string(ownerRef.UID)] = struct{}{}
 			}
 
 			if ownerRef.Kind == "StatefulSet" {
@@ -296,8 +308,6 @@ func (d *Descheduler) scheduleEvictions(ctx context.Context, pods *apiv1.PodList
 					d.logger.Errorln("Error getting StatefulSet", ownerRef.Name, "in ns", pod.Namespace, ":", err)
 					continue
 				}
-
-				ids[string(ownerRef.UID)] = struct{}{}
 
 				if sts.Status.Replicas == 0 && sts.Status.ReadyReplicas == 0 && sts.Status.AvailableReplicas == 0 {
 					d.logger.Infoln("StatefulSet", ownerRef.Name, "in ns", pod.Namespace, "has no replicas, skipping")
@@ -319,6 +329,7 @@ func (d *Descheduler) scheduleEvictions(ctx context.Context, pods *apiv1.PodList
 				if err != nil {
 					d.logger.Errorln("Error evicting pod", pod.Name, "in ns", pod.Namespace, ":", err)
 				}
+				ids[string(ownerRef.UID)] = struct{}{}
 			}
 
 		}

@@ -10,6 +10,9 @@ import (
 // ValidateLogLevel validates that the provided log level is valid
 func ValidateLogLevel(level string) error {
 	var zapLevel zapcore.Level
+	if level == "" {
+		return fmt.Errorf("log level is empty")
+	}
 	if err := zapLevel.UnmarshalText([]byte(level)); err != nil {
 		return fmt.Errorf("invalid log level %q: %w", level, err)
 	}
@@ -30,8 +33,13 @@ func (l *Logger) GetLoggerWithField(k string, v interface{}) *Logger {
 	return &Logger{l.With(k, v)}
 }
 
-func (l *Logger) GetLoggerWithFields(fields map[string]interface{}) *Logger {
-	return &Logger{l.With(fields)}
+func (l *Logger) GetLoggerWithFields(fields map[string]any) *Logger {
+	// Convert map to key-value pairs for zap
+	args := make([]interface{}, 0, len(fields)*2)
+	for k, v := range fields {
+		args = append(args, k, v)
+	}
+	return &Logger{l.With(args...)}
 }
 
 func (l *Logger) SetLogLevel(level string) error {

@@ -45,6 +45,9 @@ type DeschedulerOptions struct {
 	// nodeLabels is the list of labels to match nodes for descheduling
 	nodeLabels []string
 
+	// logLevel sets the logging verbosity
+	logLevel string
+
 	// client is the Kubernetes client for interacting with the cluster
 	client *kubernetes.Clientset
 
@@ -54,8 +57,8 @@ type DeschedulerOptions struct {
 	// deletionGracePeriod is the grace period in seconds for pod deletion
 	deletionGracePeriod int64
 
-	// logLevel sets the logging verbosity
-	logLevel string
+	// evictJobs enables evicting jobs
+	evictJobs bool
 
 	// dryRun enables running without making actual changes
 	dryRun bool
@@ -110,6 +113,7 @@ func NewCmdDescheduler() *cobra.Command {
 	cmd.Flags().StringArrayVarP(&o.skipNamespaces, "skip-namespace", "S", nil, "Namespaces to be skipped")
 	cmd.Flags().Int64VarP(&o.deletionGracePeriod, "grace-period", "g", 30, "Deletion grace period in seconds")
 	cmd.Flags().StringVarP(&o.logLevel, "log-level", "", "info", "Log level (debug, info, warn, error)")
+	cmd.Flags().BoolVarP(&o.evictJobs, "evict-jobs", "", false, "Evict pods referenced to jobs")
 	cmd.Flags().BoolVarP(&o.dryRun, "dry-run", "", false, "Dry run mode")
 	cmd.PersistentFlags().BoolP("help", "h", false, "Show help for command")
 
@@ -146,6 +150,7 @@ func (d *DeschedulerOptions) Run() error {
 		d.nodeLabels,
 		d.logLevel,
 		d.deletionGracePeriod,
+		d.evictJobs,
 		d.dryRun,
 	)
 
@@ -161,7 +166,7 @@ func (d *DeschedulerOptions) Run() error {
 		logger.Infoln("Matching nodes with labels", d.nodeLabels)
 	}
 	if len(d.nodeNames) > 0 {
-		logger.Infoln("Node names are", d.nodeNames)
+		logger.Infoln("Node names from args are", d.nodeNames)
 	}
 
 	return descheduler.Run(ctx)

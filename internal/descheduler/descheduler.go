@@ -24,14 +24,15 @@ type Descheduler struct {
 	nodes               []string
 	nodeLabels          []string
 	logLevel            string
-	client              *kubernetes.Clientset
+	client              kubernetes.Interface
 	logger              *logging.Logger
 	cancel              context.CancelFunc
 	deletionGracePeriod int64
+	evictJobs           bool
 	dryRun              bool
 }
 
-func NewDescheduler(client *kubernetes.Clientset, skipNamespaces, nodes, nodeLabels []string, logLevel string, deletionGracePeriod int64, dryRun bool) *Descheduler {
+func NewDescheduler(client kubernetes.Interface, skipNamespaces, nodes, nodeLabels []string, logLevel string, deletionGracePeriod int64, evictJobs, dryRun bool) *Descheduler {
 	logger := logging.GetLogger()
 	logger.SetLogLevel(logLevel)
 
@@ -44,6 +45,7 @@ func NewDescheduler(client *kubernetes.Clientset, skipNamespaces, nodes, nodeLab
 		client:              client,
 		logger:              logger,
 		deletionGracePeriod: deletionGracePeriod,
+		evictJobs:           evictJobs,
 		dryRun:              dryRun,
 	}
 }
@@ -118,6 +120,7 @@ func (d *Descheduler) combineNodes(ctx context.Context) error {
 		}
 		d.nodes = append(d.nodes, node.Name)
 	}
+	d.logger.Infoln("Nodes selected to deschedule:", d.nodes)
 	return nil
 }
 
@@ -163,6 +166,7 @@ func (d *Descheduler) getPods(ctx context.Context) (*apiv1.PodList, error) {
 	podList := &apiv1.PodList{}
 
 	for _, node := range d.nodes {
+		d.logger.Debugln("Gathering pods on", node)
 		p, err := d.client.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
 			FieldSelector: fmt.Sprintf("spec.nodeName=%s", node),
 		})
@@ -172,33 +176,32 @@ func (d *Descheduler) getPods(ctx context.Context) (*apiv1.PodList, error) {
 		podList.Items = append(podList.Items, p.Items...)
 	}
 
-	// filter running pods
-	runningPods := &apiv1.PodList{}
+	// filter pods
+	result := &apiv1.PodList{}
 	for _, pod := range podList.Items {
-		if pod.Status.Phase == apiv1.PodRunning {
-			runningPods.Items = append(runningPods.Items, pod)
+		if pod.Status.Phase != apiv1.PodRunning {
+			continue
 		}
-	}
-
-	// filter pods that are not in DaemonSets
-	nonDSPods := &apiv1.PodList{}
-	for _, pod := range runningPods.Items {
+		if slices.Contains(d.skipNamespaces, pod.Namespace) {
+			continue
+		}
+		// Skip pods without owner references (?)
+		if len(pod.OwnerReferences) == 0 {
+			continue
+		}
 		for _, ownerRef := range pod.OwnerReferences {
-			if ownerRef.Kind != "DaemonSet" {
-				nonDSPods.Items = append(nonDSPods.Items, pod)
+			if ownerRef.Kind == "ReplicaSet" || ownerRef.Kind == "StatefulSet" {
+				result.Items = append(result.Items, pod)
+				continue
+			}
+			if d.evictJobs && ownerRef.Kind == "Job" {
+				result.Items = append(result.Items, pod)
 			}
 		}
 	}
-	// filter pods that are not in the skipNamespaces
-	allowedPods := &apiv1.PodList{}
-	for _, pod := range nonDSPods.Items {
-		if !slices.Contains(d.skipNamespaces, pod.Namespace) {
-			allowedPods.Items = append(allowedPods.Items, pod)
-		}
-	}
 
-	d.logger.Infoln("Pods for eviction:", len(allowedPods.Items))
-	if len(allowedPods.Items) == 0 {
+	d.logger.Infoln("Pods for eviction:", len(result.Items))
+	if len(result.Items) == 0 {
 		d.logger.Infoln("No pods to evict, stopping descheduler")
 		d.cancel()
 	}
@@ -211,7 +214,7 @@ func (d *Descheduler) getPods(ctx context.Context) (*apiv1.PodList, error) {
 	// 	}
 	// }
 
-	return allowedPods, nil
+	return result, nil
 }
 
 // pod eviction func
@@ -257,9 +260,7 @@ func (d *Descheduler) scheduleEvictions(ctx context.Context, pods *apiv1.PodList
 	ids := make(map[string]struct{})
 
 	for _, pod := range pods.Items {
-
 		for _, ownerRef := range pod.OwnerReferences {
-
 			if ownerRef.Kind == "ReplicaSet" {
 				_, ok := ids[string(ownerRef.UID)]
 				if ok {
@@ -331,7 +332,6 @@ func (d *Descheduler) scheduleEvictions(ctx context.Context, pods *apiv1.PodList
 				}
 				ids[string(ownerRef.UID)] = struct{}{}
 			}
-
 		}
 	}
 	return nil

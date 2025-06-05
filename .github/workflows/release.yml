@@ -17,6 +17,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: docker/setup-qemu-action@v3
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -31,10 +32,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_AUTH_TOKEN: ${{ secrets.GORELEASER_AUTH_TOKEN}}
-      - name: Upload conditioner.yaml artifact
+      - name: Upload node-descheduler.yaml artifact
         uses: actions/upload-artifact@v4
         with:
-          name: conditioner-yaml
-          path: dist/krew/conditioner.yaml
+          name: node-descheduler-yaml
+          path: dist/krew/node-descheduler.yaml
       - name: Update new version in krew-index
         uses: rajatjindal/krew-release-bot@v0.0.47

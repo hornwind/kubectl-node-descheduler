@@ -10,4 +10,18 @@
 .env.test
 .env.production
 
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.prof
+
+# Test binary, built with `go test -c`
+*.test
+
+*.out
+
 bin/*
+dist/

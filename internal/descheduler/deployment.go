@@ -6,7 +6,6 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
-	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -17,7 +16,7 @@ type deploymentDescheduler struct {
 }
 
 func (d *deploymentDescheduler) restartDeployment(ctx context.Context, rs *appsv1.ReplicaSet) error {
-	ownerDeployment := &v1.Deployment{}
+	ownerDeployment := &appsv1.Deployment{}
 	rolloutPatchTemplate := `{
 		"spec": {
 			"template": {

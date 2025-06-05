@@ -139,16 +139,12 @@ func (d *DeschedulerOptions) Complete() error {
 func (d *DeschedulerOptions) Run() error {
 	ctx := context.Background()
 
-	// // Create context with timeout
-	// ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	// defer cancel()
-
 	descheduler := descheduler.NewDescheduler(
 		d.client,
 		d.skipNamespaces,
 		d.nodeNames,
 		d.nodeLabels,
-		d.logLevel,
+		// d.logLevel,
 		d.deletionGracePeriod,
 		d.evictJobs,
 		d.dryRun,

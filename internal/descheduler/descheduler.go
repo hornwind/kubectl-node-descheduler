@@ -20,10 +20,10 @@ const (
 
 type Descheduler struct {
 	// skipLabels          []string
-	skipNamespaces      []string
-	nodes               []string
-	nodeLabels          []string
-	logLevel            string
+	skipNamespaces []string
+	nodes          []string
+	nodeLabels     []string
+	// logLevel            string
 	client              kubernetes.Interface
 	logger              *logging.Logger
 	cancel              context.CancelFunc
@@ -32,16 +32,15 @@ type Descheduler struct {
 	dryRun              bool
 }
 
-func NewDescheduler(client kubernetes.Interface, skipNamespaces, nodes, nodeLabels []string, logLevel string, deletionGracePeriod int64, evictJobs, dryRun bool) *Descheduler {
+func NewDescheduler(client kubernetes.Interface, skipNamespaces, nodes, nodeLabels []string, deletionGracePeriod int64, evictJobs, dryRun bool) *Descheduler {
 	logger := logging.GetLogger()
-	logger.SetLogLevel(logLevel)
 
 	return &Descheduler{
 		// skipLabels:     skipLabels,
-		skipNamespaces:      skipNamespaces,
-		nodes:               nodes,
-		nodeLabels:          nodeLabels,
-		logLevel:            logLevel,
+		skipNamespaces: skipNamespaces,
+		nodes:          nodes,
+		nodeLabels:     nodeLabels,
+		// logLevel:            logLevel,
 		client:              client,
 		logger:              logger,
 		deletionGracePeriod: deletionGracePeriod,

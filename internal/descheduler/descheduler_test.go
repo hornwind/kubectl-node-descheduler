@@ -145,7 +145,7 @@ func TestDescheduler_CombineNodes(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			d := NewDescheduler(clientset, nil, tt.nodes, tt.nodeLabels, "info", 30, false, false)
+			d := NewDescheduler(clientset, nil, tt.nodes, tt.nodeLabels, 30, false, false)
 			err := d.combineNodes(context.TODO())
 
 			if tt.expectedError {
@@ -234,7 +234,7 @@ func TestDescheduler_GetPods(t *testing.T) {
 				_, err := clientset.CoreV1().Pods(pod.Namespace).Create(context.TODO(), pod, metav1.CreateOptions{})
 				assert.NoError(t, err)
 			}
-			d := NewDescheduler(clientset, tt.skipNamespaces, tt.nodes, nil, "info", 30, false, false)
+			d := NewDescheduler(clientset, tt.skipNamespaces, tt.nodes, nil, 30, false, false)
 			d.updateSkipNamespaces()
 
 			pods, err := d.getPods(context.TODO())
@@ -320,7 +320,7 @@ func TestDescheduler_Run(t *testing.T) {
 				assert.NoError(t, err)
 			}
 
-			d := NewDescheduler(clientset, tt.skipNamespaces, tt.nodes, nil, "info", 30, false, tt.dryRun)
+			d := NewDescheduler(clientset, tt.skipNamespaces, tt.nodes, nil, 30, false, tt.dryRun)
 
 			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
 			defer cancel()
@@ -360,7 +360,7 @@ func TestDescheduler_UpdateSkipNamespaces(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewDescheduler(nil, tt.skipNamespaces, nil, nil, "info", 30, false, false)
+			d := NewDescheduler(nil, tt.skipNamespaces, nil, nil, 30, false, false)
 			d.updateSkipNamespaces()
 			assert.ElementsMatch(t, tt.expected, d.skipNamespaces)
 		})

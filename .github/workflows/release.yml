@@ -37,5 +37,5 @@ jobs:
         with:
           name: node-descheduler-yaml
           path: dist/krew/node-descheduler.yaml
-      - name: Update new version in krew-index
-        uses: rajatjindal/krew-release-bot@v0.0.47
+      # - name: Update new version in krew-index
+      #   uses: rajatjindal/krew-release-bot@v0.0.47
